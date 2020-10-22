@@ -1,7 +1,7 @@
 import os
 import sys
 
-from typing import List
+from typing import Any, List, Dict, Tuple
 from collections import OrderedDict
 import torch
 import torch.nn as nn
@@ -428,3 +428,67 @@ class TestModuleContainers(JitTestCase):
 
         m = MyModule()
         self.checkModule(m, [torch.randn(2, 2)])
+
+    def test_typed_module_dict(self):
+        """
+        Test that a type annotation can be provided for a ModuleDict that allows
+        non-static indexing.
+        """
+        @torch.jit.interface
+        class ModuleInterface(torch.nn.Module):
+            def forward(self, inp: Any) -> Any:
+                pass
+
+        class ImplementsInterface(torch.nn.Module):
+            def forward(self, inp: Any) -> Any:
+                if isinstance(inp, torch.Tensor):
+                    return torch.max(inp, dim=0)
+
+                return inp
+
+        class DoesNotImplementInterface(torch.nn.Module):
+            def forward(self, inp: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+                return torch.max(inp, dim=0)
+
+        # Test annotation of submodule.
+
+        class Mod(torch.nn.Module):
+            __annotations__ = {"d": Dict[str, ModuleInterface]}
+
+            def __init__(self):
+                super().__init__()
+                self.d = torch.nn.ModuleDict({"module": ImplementsInterface()})
+
+            def forward(self, x: torch.Tensor, key: str) -> Any:
+                return self.d[key].forward(x)
+
+        m = Mod()
+        self.checkModule(m, (torch.randn(2, 2), "module"))
+
+        # Test annotation of self.
+        class ModDict(torch.nn.ModuleDict):
+            __annotations__ = {"self": Dict[str, ModuleInterface]}
+
+            def __init__(self):
+                super().__init__({"module": ImplementsInterface()})
+
+            def forward(self, x: torch.Tensor, key: str) -> Any:
+                return self[key].forward(x)
+
+        m = ModDict()
+        self.checkModule(m, (torch.randn(2, 2), "module"))
+
+        # Test error message thrown when annotated attribute does not comply with the
+        # annotation.
+        class ModWithWrongAnnotation(torch.nn.ModuleDict):
+            __annotations__ = {"d": Dict[str, ModuleInterface]}
+
+            def __init__(self):
+                super().__init__()
+                self.d = torch.nn.ModuleDict({"module": DoesNotImplementInterface()})
+
+            def forward(self, x: torch.Tensor, key: str) -> Any:
+                return self.d[key].forward(x)
+
+        with self.assertRaisesRegex(RuntimeError, r"Attribute module is not of annotated type"):
+            torch.jit.script(ModWithWrongAnnotation())

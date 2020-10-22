@@ -112,6 +112,13 @@ bool ConcreteModuleTypeBuilder::equals(
       overloads_ == other.overloads_ &&
       functionAttributes_ == other.functionAttributes_ &&
       builtinFunctions_ == other.builtinFunctions_;
+
+    // Contained types match if both are absent or if both are present and the types they point to are equal.
+    bool containedTypeHintsMatch = (!containedTypeHint_ && !other.containedTypeHint_) ||
+      (containedTypeHint_ && other.containedTypeHint_ && *containedTypeHint_ == *other.containedTypeHint_);
+
+    equal &= containedTypeHintsMatch;
+
   // clang-format on
   if (!equal) {
     return false;
@@ -138,6 +145,10 @@ bool ConcreteModuleTypeBuilder::equals(
       });
 
   return thisSorted == otherSorted;
+}
+
+TypePtr ConcreteModuleType::getContainedTypeHint() const {
+  return data_.containedTypeHint_;
 }
 
 TypePtr ConcreteModuleType::getJitType() const {
@@ -201,6 +212,11 @@ std::shared_ptr<ConcreteModuleType> ConcreteModuleType::
       });
   TORCH_INTERNAL_ASSERT(it != data_.modules_.end());
   return it->meta_;
+}
+
+void ConcreteModuleTypeBuilder::setContainedTypeHint(
+    TypePtr containedTypeHint) {
+  containedTypeHint_ = containedTypeHint;
 }
 
 void ConcreteModuleTypeBuilder::setIterableModuleKind(IterableModuleKind kind) {
@@ -315,6 +331,10 @@ void ConcreteModuleType::dump() const {
   std::cout << "isPoisoned: " << isPoisoned << "\n";
   if (jitType_) {
     std::cout << "jit type: " << jitType_->annotation_str() << "\n";
+  }
+  if (data_.containedTypeHint_) {
+    std::cout << "containedTypeHint: "
+              << data_.containedTypeHint_->annotation_str() << "\n";
   }
 }
 

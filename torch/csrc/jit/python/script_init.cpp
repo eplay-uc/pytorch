@@ -1590,6 +1590,9 @@ void initJitScriptBindings(PyObject* module) {
           [](ConcreteModuleTypeBuilder& self) {
             self.setIterableModuleKind(IterableModuleKind::DICT);
           })
+      .def(
+          "set_contained_type_hint",
+          &ConcreteModuleTypeBuilder::setContainedTypeHint)
       .def("build", &ConcreteModuleTypeBuilder::build)
       .def(
           "equals",
